@@ -1,0 +1,134 @@
+---
+title: "Ridge Lasso and Elastic-Net Regression"
+output: html_document
+---
+To do Ridge, Lasso and Elastic-Net Regression in R, we will use the glmnet library. 
+
++ The "glm" part of glmnet stands for "Generalized Linear Models", which means that this tool can be applied to linear regression and logistic regression as well as a few other models. 
++ The "net" part of glmnet is from Elastic-Net.
+
++ the sum of the squared residuals + $\lambda*[\alpha*(|variable_{1}|+...+|variblae_{x}|)+(1-\alpha)*(variable_{1}^2+...varialbe_{x}^2)]$
+
++ $\alpha$ can be any value from 0 to 1, when $\alpha=0$, then the whole Lasso Penalty goes to zero, and we're left with just the Ridge Regression penalty, and the whole thing reduces to Ridge Regression. When $\alpha=1$, then the whole Ridge Penalty goes to zero, and we're left with just the Lasso Regression penalty, and the whole thing reduces to Lasso Regression. And when $\alpha$ is between 0 and 1, we get a mixture of the two penalties that does a better job shrinking correlated variables than either Lasso and Ridge does on their own.
+
++ $\lambda$ controls how much of the penalty to apply to the regression. When $\lambda=0$, then the whole penalty goes away and we're just doing standard least squares for Linear Regression (or maximum likelihood for Logistic Regression). And when $\lambda>0$, then the Elastic-Net Penalty kicks in and we start shrinking parameter estimates.
+Thus, when we use the glmnet package to do Elastic-Net Regression, we will test different values for $\lambda$ and $\alpha$.
+
+```{r}
+library(glmnet)
+set.seed(42) # set a seed for the random number generator so that you'll get the same results as me
+n <- 1000
+p <- 5000
+real_p <-15 # only 15 of those parameters will help us predict the outcome, the remain 4985 parameters will just be random noise.
+x <- matrix(rnorm(n*p), nrow=n, ncol=p) #create a matrix called x that is full of randomly generated data, the values in the matrix come from a standard normal distribution (with mean=0 and standard deviation=1)
+y <- apply(x[,1:real_p],1,sum)+ rnorm(n) # now we create a vector of values, called y, that we will try to predict with the data in x, apply() will return a vector of 1000 values that are the sums of the first 15 columns in x, since x has 1000 rows. apply(,1,sum): this 1 specifies that we want to perform a function on each row of data that we've isolated from x. To summarize, this call to apply() will return a vector of values that depend on the first 15 columns in x. So this whole thing creates a vector called y that is dependent on the first 15 columns in x, plus a little noise.
+```
+Dividing data into training and testing sets, create our training and testing datasets.
+```{r}
+train_rows <- sample(1:n, .66*n)
+# we make a vector of *indexes*, called train_rows, that contains the row numbers of the rows that will be in the training set. The sample() function randomly selects numbers between 1 and n, the number of rows in our dataset, and it will select 0.66*n row numbers. Two-thirds of the data will be in the training set.
+x.train <- x[train_rows, ]
+# Now that we have indexes for the rows in the training set in train_rows, we can make a new matrix, x.train, that just contains the traing data.
+x.test <- x[-train_rows, ]
+y.train <- y[train_rows]
+# select the training values in y 
+y.test <- y[-train_rows]
+```
+
+We'll apply Ridge, Lasso and Elastic-Net regression separately to these datasets so that we can see how it's done and see which method works best.
+
+## Ridge regression
+
+### The first thing we need to do is fit a model to the training data
+```{r}
+alpha0.fit <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=0, family="gaussian")
+```
+* The "cv" part means we want to use cross-validation to obtain the optimal values for lambda. By default, cv.glmnet() uses 10-Fold Cross Validation. We want to use x.train to predict y.train.
+Note: unlike the lm() and glm() functions, cv.glmnet() does not accept formula notation; x and y must be passed in separately.
+* type.measure is how the cross-validation will be evaluated, and it is set to mse, which stands for mean squared error.Mean squared error is just the sum of the squared residuals divided by the sample size.
+Note: If we were applying Elastic-Net Regression to Logistic Regression, we would set this to deviance.
+* Since we are starting with ridge regression, we set alpha to 0.
+* We set family to gaussian, this tells glmnet that we are doing linear regression.
+Note: If we were doing logistic regression, we would set this to binomial.
+* Altogether, this call to cv.glmnet() will fit a linear regression with a ridge regression penalty using 10-fold cross validation to find optimal values for lambda, and the fit model, along with optimal values for lambda, is saved as alpha0.fit, which will help us remember we set alpha to 0 for Ridge Regression.
+
+### Now we will use the predict() function to apply alpha0.fit to the testing data.
+```{r}
+alpha0.predicted <- predict(alpha0.fit, s=alpha0.fit$lambda.1se, newx=x.test)
+```
+* The first parameter is a fitted model. In this case, it's alpha0.fit.
+* s, which I think stands for "size", as in "the size of the penalty" is set to one of the optimal values for lambda stored in alpha0.fit. In this example, we are setting s to lambda.1se.
+* lambda.1se is the value for lambda, stored in alpha0.fit, that resulted in the simplest model(i.e. the model with the fewest non-zero parameters) and was within 1 standard error of the lambda that had the smallest sum.
+Note: alternatively, we could set s to lambda.min, which would be the lambda that resulted in the smallest sum. However, in this example we will use lambda.1se because, in a statistical sense, it is indistinguishable from lambda.min, but it results in a model with fewer parameters. Since we will compare Ridge to Lasso and Elastic-Net Regression, we will use lambda.1se for all three cases to be consistent.
+
+### Now we calcuate the mean squared error of the difference between the true values, stored in y.test, and the predicted values, stored in alpha0.predicted.
+```{r}
+mean((y.test-alpha0.predicted)^2)
+```
+
+## Lasso Regression
+
+```{r}
+alpha1.fit <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=1, family="gaussian")
+```
+
+Just like before, we call cv.glmnet() to fit a Linear Regression using 10-Fold Cross Validation to determine optimal values for lambda. We store the model and the optimal values for lambda in alpha1.fit, to remind us that set alpha to 1.
+
+```{r}
+alpha1.predicted <- predict(alpha1.fit, s=alpha1.fit$lambda.1se, newx=x.test)
+mean((y.test-alpha1.predicted)^2)
+```
+
+1.19 sth sth is way smaller than 14.47 sth sth, so, Lasso Regression is much better with this data than Ridge Regression.
+
+### Elastic-Net Regression
+
+Now let's see how well Elastic-Net Regression, which combines both Ridge and Lasso penalties, performs. Just like before, we call cv.glmnet() to determine optimal values for lambda.
+
+```{r}
+alpha0.5.fit <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=0.5, family="gaussian")
+alpha0.5.predicted <- predict(alpha0.5.fit, s=alpha0.5.fit$lambda.1se, newx=x.test)
+mean((y.test-alpha0.5.predicted)^2)
+```
+
+This is slightly larger than the 1.19 sth sth we got with Lasso Regression, so, so far, Lasso wins.
+
+## But to really know if Lasso wins, we need to try a lot of different values for alpha. 
+
+To try a bunch of values for alpha, we'll start by making an empty list called list.of.fits that will store a bunch of Elastic-Net Regression fits. Then we use a for loop to try different values for alpha.
+```{r}
+list.of.fits <- list()
+for (i in 0:10) {
+  fit.name <- paste0("alpha", i/10)
+  
+  list.of.fits[[fit.name]] <-
+    cv.glmnet(x.train, y.train, type.measure="mse", alpha=i/10, family="gaussian")
+}
+```
+
+* In this for loop, i will be integer values from 0 to 10. First, we paste together a name for the Elastic-Net fit that we are going to create. For example, when i=0, then fit.name will be alpha0, because alpha will be pasted to 0/10 which equals 0. When i=1, then fit.name will be alpha0.1, because alpha will be pasted to 1/10 which equals 0.1.
+* when i=0, then alpha will be 0 and result in Ridge Regression, when i=1, then alpha will be 0.1. etc. etc. etc., until i=10, and alpha=1, resulting in Lasso Regression.
+* Each fit will be stored in list.of.fits under the name we stored in fit.name.
+
+### Now we are ready to calucate the mean squared errors for each fit with the Testing dataset.
+
+```{r}
+results <- data.frame()
+for (i in 0:10) {
+  fit.name <- paste0("alpha", i/10)
+  
+  predicted <-
+    predict(list.of.fits[[fit.name]], 
+            s=list.of.fits[[fit.name]]$lambda.1se, newx=x.test)
+  
+  mse <- mean((y.test-predicted)^2)
+  
+  temp <-data.frame(alpha=i/10, mse=mse, fit.name=fit.name)
+  results <-rbind(results, temp)
+}
+results
+```
+
+We'll start by creating an empty data.frame, called results, that will store the mean squared errors and a few other things. Then we'll use another for loop to predict values using Testing dataset and to calculate the mean squared errors.
+
+The fit where alpha=1, is still the best, so Lasso Regression is the best method to use this data.
