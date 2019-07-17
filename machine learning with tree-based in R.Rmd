@@ -1,0 +1,503 @@
+---
+title: "Machine Learning with Tree-Based Models in R"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+### Learning outcome:
+
+* Interpret and explain decisions
+* Explore different use cases
+* Build and evaluate classification and regression models
+* Tune model parameters for optimal performance
+
+### Terminology: nodes
+
+1. root node
+2. internel nodes
+3. leaf nodes
+
+### package: library("rpart")
+
+***
+
+> Classification Trees
+
+#### Advantages
+
+* simple to understand, interpret, visualize
+* can handle both numerical and categorical features 
+* can handle missing data
+* robust to outliers
+* requires little data preparation
+* can model non-linearity in the data
+* can be trained quickly on large datasets
+
+#### Disadvantages
+
+* large trees can be hard to interpret
+* Trees have high variance, which causes model performance to be poor
+* trees overfit easily
+
+
+#### Train/Test split in R
+
+```{r}
+#1.total number of rows in the restaurant data frame
+# n <- nrow(restaurant)
+
+#2. number of rows for the training set (80% of the dataset)
+# n_train <- round(0.80*n)
+
+#3. create a vector of indices which is an 80% random sample
+# set.seed(123) # set a random seed for reproducibility
+# train_indices <- sample(1:n, n_train)
+
+#4. subset the data frame to training indices only
+# restaurant_train <- restaurant[train_indices, ]
+
+#5. exclude the training indices to create the test set
+# restaurant_test <- restaurant[-train_indices, ]
+```
+
+#### Train a classification tree
+
+```{r}
+# train the model to predict the binary response, will_wait
+# restaurant_model <- rpart(formula = will_wait~., data=restaurant_train, method="class", parms=list(split="gini"))
+#Note: parm: /"information"
+```
+
+
+#### Evaluate Model performance
+
+```{r}
+# predicting class labels for test data
+# predict(model, test_dataset, type=)
+#class_prediction <- predict(object=restaurant_model, newdata=restaurant_test, type="class") 
+```
+
+#### Evaluation Metrics for Binary Classification
+
+1. Accuracy
+$$ accuracy=\frac{n of correct predictions}{n of total data points} $$
+```{r}
+# ce(actual= , predict = )
+```
+
+
+2. Confusion Matrix
+
+```{r}
+# package(caret)
+# confusionMatrix(data=class_prediction, reference=restaurant_test$will_wait) 
+# Note: data= predicted classes; reference= actual classes
+```
+
+3. Log-loss
+4. AUC
+
+#### Splitting criterion in trees
+
+* Split the data into "pure" regions (decision boundaries)
+* How to determine the best split? more homogeneous=more pure
+* Impurity Measure--Gini Index: lower the gini index, the higher the purity 
+* / "Information", entropy
+
+***
+
+> Regression Trees
+
+#### Train/Validation/Test split
+
+```{r}
+# set.seed(1)
+# assignment <-sample(1:3, size= nrow=(grade), prob=c(0.7,0.15,0.15),replace=TRUE)
+# grade_train <- grade[assignment == 1, ]
+# grade_valid <- grade[assignment == 2, ]
+# grade_test <- grade[assignment == 3,  ]
+```
+
+#### Train a regression tree in R
+
+```{r}
+# rpart(formula= , data=  , method= , control=)
+#Note: 1.method: "anova" for regression tree; "class" for classification tree
+#      2.control: optional parameters for controlling the tree growth
+```
+
+#### Plot the tree model
+
+```{r}
+# grade_model <-rpart(formula =final_grade~., data= grade_train, method="anova")
+# rpart.plot(x=grade_model, yesno=2,type=0, extra=0)
+```
+   
+#### Performance metrices for regression
+    
+* mean absolute error (MAE)
+    $$ MAE= \frac{1}{n}\sum|actual-predicted| $$
+* root mean square error (RMSE)
+    $$ RMSE =\sqrt{\frac{1}{n}\sum(actual-predicted)^2}$$
+    
+#### Evaluate a regression tree model
+```{r}
+# predict <-predict(object=model, newdata=test)
+# library(Metrics)
+# rmse(actual=test$response, predicted=pred)
+```
+    
+#### What are the hyperparameters for a decision tree
+    
+```{r}
+# ?rpart.control
+```
+    
+#### Decision tree hyperparameters
+    
+    1. minsplit: minimum number of data points required to attempt a split (default=20)
+    2. cp: complexity parameter (default=.01) 
+         +  plotcp(grade_model)
+         +  print(model$cptable) choose cp with minimum xerror
+         +  model_opt <-prune(tree=model, cp=cp_opt) to prune the model and get the optimal model
+    3. retrieve optimal cp value based on cross-validated error
+         + opt_index <- which.min(grade_model$cptable[, "xerror"])
+         + cp_opt <- grade_model$cptable[opt_index, "CP"]
+    4. maxdepth: depth of a decision tree
+
+#### Grid search for model selection
+
+* set up the grid
+       
+```{r}
+# 1.Establish a list of possible values for minsplit and maxdepth
+# minsplit <- seq(1, 30, 5)
+# maxdepth <- seq(5, 40, 10)
+# 2.Create a data frame containing all combinations
+# hyper_grid <- expand.grid(minsplit=minsplit, maxdepth=maxdepth)
+# hyper_grid[1:10, ]
+```
+         
+* Train models
+
+```{r}
+# 1. Create an empty list to store models
+# models <-list()
+# 2. Excute the grid search
+# for (i in 1:nrow(hyper_grid)){
+#              # get minsplit, maxdepth values at row i
+#              minsplit <- hyper_grid$minsplit[i]
+#             maxdepth <- hyper_grid$maxdepth[i]
+#              # train a model and store in the list
+#              model[[i]] <- rpart(formula = response ~.,
+#                                  data = train,
+#                                  method ="anova",
+#                                  minsplit=minsplit)
+#              }
+
+```
+  
+*  Evaluate models
+```{r}
+#1. create an empty vector to store RMSE values
+# rmse_values <- c()
+
+#2. compute validation RMSE fr
+# for (i in 1: length(models)){
+#    # retreive the i^th model from the list
+#   model <- model[[i]]
+#
+#    # generate predictions on grade_valid
+#   pred <- predict(object=model, newdata=valid)
+#    
+#    # compute validation RMSE and add to the 
+#   rmse_value[i] <- rmse(actual=valid$reponse, predicted=pred)
+#}
+```
+
+
+***
+
+> Bagged Trees
+
+* Decision tree drawback: high variance
+* Bagging: Bootstrap AGGregatING
+* Random with replacement 
+
+```{r}
+# set.seed(123)
+# library(ipred)
+# bagging(formula=response~., data= ,coob=TRUE)
+# Note: if we want to estimate the model's accuracy using the "out-of-bag" (OOB) samples, we can set the "coob" parameter to "TURE". The OOB samples are the training observations that were not selected into the bootstrapped sample  (using in training). Since these observations were not used in training, we can use them instead to evaluate the accuracy of the model.
+```
+
+* Evaluating the performance of bagged tree models
+
+1. Generate predictions
+
+```{r}
+# class_predictoins <- predict(object=rest_model, newdata=restaurant_test, type="class") # return classification labels
+# print(class_predictions)
+```
+
+2. Confusion Matrix/  ROC curve
+
+```{r}
+# library(caret)
+# confusionMatrix(data=class_predictions, reference=restaurant_test$will_wiat)
+```
+
+3.AUC
+
+```{r}
+# pred <- predict(object=model, newdata=testing, type="prob")
+# library(Metrics)
+# auc(autual,predicted) # "actual" must be a binary (or 1/0 numeric) vector
+```
+
+* Cross-validating models
+1. k-fold cross-validation
+    + k=10, 10 estimates of test set AUC
+    + the average is the vross-validated estimate of AUC
+    
+2. Using caret for cross-validating models
+```{r}
+# library(caret)
+```
+    + train()
+    + trainControl()
+```{r}
+#1. Specify the training configuration
+# ctrl <- trainControl(method="cv", number=5, classProbs=TRUE, summaryFunction = twoClassSummary)
+# Note: 'cv' for cross-validation, 'number' for 5 folds, 'classProbs' & 'summaryFunction' for AUC 
+
+#2. Training configuration
+# set.seed(1)
+# credit_model <- train(default~., data=credit_train, method="treebag", metric="ROC", trControl=ctrl)
+# Note: the 'caret' train() with "treebag" method to train a model and evaluate the model using cross-validated AUC
+```
+
+
+***
+
+> Ramdom Forests
+
+1. Introduction to Random Forest
+* better performance
+* sample subset of the features
+* improved version of bagging
+* reduced correlation between the sampled trees
+* Package(randomForest)
+
+* Train a random forest model
+```{r}
+# library(randomForest)
+# Train a default RF model (500 trees)
+# set.seed(123)
+# model <- randomForest(formula =response ~., data=train)
+```
+
+* Evaluate out-of-bag error
+```{r}
+#1. Grab oOOB error matrix & take a look
+# err <- model$err.rate
+# head(err)
+
+#2. Look at final OOB error rate (last row in err matrix)
+# oob_err <-err[nrow(err), "OOB"]
+
+#3. plot the OOB error rate against the number of trees in the forest
+# plot(model)
+```
+
+* Note: no.of variables tried at each split= sqrt(no.of features)
+* confusion matrix made of out-of-bag samples: built in validation sets
+
+2. Understanding Random Forest model output
+* Evaluate model performance on a test set
+* Package(caret): function: confusionMatrix()
+
+```{r}
+#1. generate predicted classes using the model object
+# class_prediction <- predict(object= model, newdata=test, type="class")
+# Note:return classification labels
+
+#2. calculate the confusion matrix for the test set
+# cm <- confusionMatrix(data= class_prediction, reference= test$response)
+# print(cm)
+
+#3. compare test set accuracy to OOB accuracy
+# paste0("Test Accuracy:", cm$overall[1])
+# paste0("OOB Accuracy:", 1-obb_err)
+```
+
+3. OOB error vs. test set error
+* advantages & disadvantages of oob estimates
+    + can evaluate your model without a separate test set
+    + computed automatically by the randomForest() function
+    + OOB Error only estimates error (not AUC, log-loss, etc.)
+    + can't compare Random Forest performance to other types of models (needs same validation set)
+    
+* Evaluate test set AUC
+```{r}
+#1. generate predictions on the test set
+# pred <- predict(object = model, newdata = test, type="prob") # generate numeric predictions
+
+#2. 'pred' is a matrix
+# class(pred)
+
+#3. look at the pred format
+# head(pred)
+
+#4. compute the AUC ('actual' must be a binary 1/0 numeric vector)
+# auc(actual = ifelse(test$reponse=="yes",1,0), predicted=pred[,"yes"])
+# Note: auc() function from the Metrics package
+```
+
+4. Tuning a Random Forest model
+
+* Random Forest Hyperparameters
+
+    + ntree: number of trees
+    + mtry: number of variables randomly sampled as candidates at each split
+    + sampsize: number of samples to train on
+    + nodesize: minimum size (number of samples) of the terminal nodes
+    + maxnodes: maximum number of terminal nodes
+
+* Note:
+1. ntree with the default value of 50 trees
+2. mtry & sampsize both control how much variability or randomness goes into the random forest model; sampsize default to 63.2% of the number of training examples, it's the expected number of unique observations in a bootstrapped sample.
+3. nodesize & maxnodes are both parameters that control the complexity of the tree. when nodesize is samll it allows deeper, more complex trees to be grwon; maxnodes is just another way to limit tree growth and avoid overfitting.
+4. keep in mind that each random forest implementation can use different names for these same parameters; these are just the names that the randomForest R package uses.
+    
+* Tuning mtry with tuneRF()
+```{r}
+#1. Execute the tuning process
+# set.seed(1)
+# res <- tuneRF(x=train_predictor, y=train_response_vector, ntreeTry=500)
+# print(res)
+# Note: 'x' matrix or data frame of predictor variables; 'y' response vector, must be a factor for classification, can set 'doBest=TRUE' in 'tuneRF()' to return the best RF model
+
+#2. Find the mtry value that minimizes OOB Error
+# mtry_opt <- res[, "mtry"][which.min(res[,"OOBError"])]
+# print(mtry_opt)
+```
+
+* Note:
+1. At each split in a tree, we consider some number of predictor variables--from this group, we choose the variable that splits the data in the most pure manner.
+2. The randomForest package has a built-in function for tuning the mtry parameter called tuneRF()， which tunes the model based on OOB error.
+3. Rather than iterating over a set list of mtry values, the tuneRF function will start with default value of mtry and increase the value by an amount specified in StepFactor argument.The tuning process ends when the OOB error stops decreasing by a specific amount.
+4. The specialized tuneRF() function is just one way to tune Random Forest.
+5. Grid search: a manual grid search gives us more control over the search space, allows us to evaluate the Random Forest using metrics other than OOB Error, and include other model hyperparameters in the grid search, such as nodesize and sampsize
+
+
+* Tuning a Random Forest via tree depth with expand.grid() function
+```{r}
+# We create a grid of 'mtry', 'nodesize', 'sampsize' values. In this example, we will identify the "best model" based on OOB error. The best model is defined as the model from our grid which minimizes OOB error.
+
+#1. Establish a list of possible values for mtry, nodesize and sampsize
+# mtry <- seq(4, ncol(train)*0.8, 2)
+# nodesize <- seq(3, 8, 2)
+# sampsize <- nrow(credit_train)*c(0.7,0.8)
+
+#2. Create a data frame containing all combinations
+# hyper_grid <- expand.grid(mtry = mtry, nodesize = nodesize, sampsize = sampsize)
+
+#3. Create an empty vector to store OOB error values
+#oob_err <- c()
+
+#4. Write a loop over the rows of hyper_grid to train the grid of models
+# for (i in 1:nrow(hyper_grid)){
+#  model<-randomForest(formula = default ~., 
+#                      data=train, 
+#                      mtry=hyper_grid$mtry[i])
+#                      nodesize=hyper_grid$nodesize[i]
+#                      sampsize=hyper_grid$sampsize[i])
+#  obb_err[i] <- model$err.rate[nrow(model$err.rate),"OOB"]
+#  }
+
+#5. Identify optimal set of hyperparmeters based on OOB error
+#  opt_i <- which.min(obb_err)
+# print(hyper_grid[opt_i, ])
+```
+
+* Note: keep in mind there are other ways to select a best model from a grid, such as choosing the best model based on **validation AUC**. However, for this exercise, we will use the built-in OOB error calculations instead of using a separate validation set.
+
+***
+
+> Boosted Trees (GBM)
+
+* Boosted trees, another type of tree-based ensemble method. Gradient Boosting Machine
+* Use package(gbm) to train and tune GBM model in R
+* Two most popular boosting algorithms are:
+      + Adaboost
+      + Gradient Boosting Machine (GBM)
+
+1. Adaboost algorithm
+* Train decision tree where with equal weight
+* Increase/Lower the weights of the observations. Increase the weights of the observations that are difficult to classify and lower weights of the observations that are easy to classify.
+* Second tree is grown on weighted data. The idea here is to improve the predictions of first tree.
+* New model: Tree1+Tree2
+* Classification error from this new 2-tree ensemble model 
+* Grow 3rd tree to predict the revised residuals
+* Repeat this process for a specified number of iterations
+* The prediction for the final GBM ensemble model is a weighted sum of the predictions made by previous tree models.
+
+2. Gradient Boosting Machine(GBM)
+Gradient Boosting = Gradient Descent + Boosting
+* Fit an additive model(ensemble) in a forward, stage-wise manner. Boosting is an iterative algorithm that considers past fits to improve performance.
+* In each stage, introduce a "weak learner" (e.g.decision tree) to compensate the shortcoming of existing weak learners.
+* In Adaboost, "shortcomings" are identified by high-weight data points
+* In Gradient Boosting, the "shortcomings" are identified by gradients.
+* package(gbm)
+
+2.1 Advantages 
+
+* Often performs better than any other algorithm
+
+* Directly optimizes cost function
+
+* No data pre-processing required---often works great with categorical and numerical values as is
+
+* Handles missing data--imputation not required
+
+2.2 Disadvantages
+
+* Overfitting and sensitive to extreme values and noises---GBMs will continue improving to minimize all errors. This can overemphasize outliers and cause overfitting. Must use cross-validation to neutralize.
+
+* Computationally expensive--- GBMs often require many trees (>1000) which can be time and memory exhuastive.
+
+* The high flexibility results in many parameters that interact and influence heavily the behavior of the approach (number of iterations, tree depth, regularization parameters, etc.). This requires a large grid seach during tuning.
+
+* Less interpretable although this is easily addressed with various tools (variable importance, partial dependence plots, LIME, etc.).
+
+
+3. Train a GBM model
+```{r}
+#1. Convert "yes" to 1, "no" to 0
+# train$response <- ifelse(train$response=="yes",1,0)
+
+#2. Train a 5000-tree GBM model
+# set.seed(1)
+# model <- gbm(formula = response ~., distribution="bernoulli", data=train, n.trees=5000) # the default number of trees in the gbm function is 100, it's enough to get a reasonable, quick estimate of GBM performance on your dataset.
+# print(model)
+
+#3. summary() prints variable importance
+# summary(model)
+```
+
+4. Understanding GBM model output
+```{r}
+# print(model) : 1. show how many trees, or iterations, were trained in its execution; 2.if our predictor variables had no influence in the model;3.if you have noise variables or variables with no correlation with the outcome in your training data, they should show up here
+
+# Nice feature of tree-based model: built in mechanism for evaluating variable importance
+# summary(model) : produces a variable importance table and plot for the model
+
+# predict.gbm(model, type="response", ntrees=10000)
+
+```
+
+
+
