@@ -1,0 +1,187 @@
+---
+title: "STAT 6240 - PCA and NMF"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+### PCA Application to Statistical Data
+
+```{r}
+data(iris)
+iris_pca <- prcomp(iris[,-5],center = TRUE,scale. = TRUE)
+iris_pca$rotation
+```
+
+```{r}
+plot(iris_pca$x[,1:2],col=iris$Species)
+```
+
+### Logistic PCA
+```{r}
+#install.packages("logisticPCA")
+library(logisticPCA)
+data(house_votes84)
+house_votes84 %>% glimpse
+```
+
+```{r}
+logpca_cv = cv.lpca(house_votes84, ks = 2, ms = 1:10)
+plot(logpca_cv)
+```
+
+```{r}
+house_pca <- logisticPCA(house_votes84, k = 2, m = which.min(logpca_cv))
+party <- rownames(house_votes84)
+plot(house_pca, type = "scores") + geom_point(aes(colour = party)) + 
+  ggtitle("Logistic PCA") + scale_colour_manual(values = c("blue", "red"))
+```
+
+### Sparse PCA on Randomly Generated Data
+
+```{r}
+library(sparsepca)
+u <- matrix(c(rep(1,10), rep(0,190)),ncol=1)
+v <- matrix(c(rep(1,10), rep(0,290)), ncol=1)
+x <- u%*%t(v)+matrix(rnorm(200*300,sd = 0.5), ncol=300)
+
+x_eigen <- eigen(t(x)%*%x)
+plot(x_eigen$values)
+
+plot(x_eigen$vectors[,1])
+
+spca_est <- spca(x,k=1,alpha=0.025)
+plot(spca_est$loadings)
+```
+
+
+### Sparse PCA on Genetics
+```{r}
+source("https://bioconductor.org/biocLite.R")
+BiocInstaller::biocLite(c("multtest", "impute","EBImage"))
+
+#install.packages("PMA")
+library(PMA)
+data(breastdata)
+```
+
+```{r}
+PlotCGH(breastdata$dna[,1], chrom=breastdata$chrom, main="Individual 1", nuc=breastdata$nuc)
+b_spca <- spca(t(breastdata$dna),k = 2,alpha = 0.05,max_iter = 500)
+(b_spca$loadings[,1]==0) %>% mean
+plot(b_spca$loadings[,1])
+plot(b_spca$loadings[,2])
+```
+
+```{r}
+#install.packages("multtest")
+library(multtest)
+data(golub)
+```
+
+```{r}
+golub_spca <- spca(t(golub),k = 1,alpha = 0.05,max_iter = 500)
+(golub_spca$loadings[,1]==0) %>% mean
+plot(golub_spca$scores,col=(golub.cl+1))
+```
+
+
+### PCA Application on Faces
+
+```{r}
+#install.packages("devtools")
+#install.packages("raster")
+# devtools::install_github("vbonhomme/eigenfaces", build_vignettes=TRUE)
+# devtools::install_github("vbonhomme/Momocs", build_vignettes=TRUE)
+library(eigenfaces)
+library(Momocs)
+library(raster)
+data(pain)
+pain
+str(pain)
+```
+
+```{r}
+dim(pain)
+dim(pain) <- c(241*181,84)
+class(pain) <- "matrix"
+pain <- t(pain)
+
+pain_p <- prcomp(pain,center = TRUE,scale. = TRUE)
+
+pain_p$rotation[,1] %>% matrix(nrow=241,ncol=181) %>% t %>% image(col=gray(0:100/100))
+par(mfrow=c(3,3))
+for(i in 1:9){
+  pain_p$rotation[,i] %>% matrix(nrow=241,ncol=181) %>% t %>% image(col=gray(0:100/100)) %>% print
+}
+```
+
+### PCA Application on Dresses
+
+```{r}
+#install.packages("jpeg")
+library(jpeg)
+library(EBImage)
+
+PIC_SIZE <- 200*260*3
+LAST_PC <- 100
+
+allFiles <- paste0("a1/",list.files("a1/"))
+
+zzz <- proc.time()
+convert_to_bw <- function(x){
+  a <- readImage(x)
+  a <- channel(a,"gray")
+  a
+}
+  
+allPics <- sapply(allFiles,function(x) matrix(convert_to_bw(x),nrow=1))
+
+allPics <- t(allPics)
+dress_pca <- prcomp(allPics,center = TRUE)
+
+theMin <- min(apply(dress_pca$rotation[,1:LAST_PC],2,min))
+theMax <- max(apply(dress_pca$rotation[,1:LAST_PC],2,max))
+
+rots <- (dress_pca$rotation[,1:LAST_PC]-theMin)/(theMax-theMin)
+
+rots[,1] %>% matrix(nrow=200,ncol=260) %>% t %>% image(col=gray(0:100/100))
+```
+
+### NMF Application on Dresses
+
+```{r}
+# install.packages("NMF")
+library(NMF)
+dresses_nmf <- nmf(allPics,rank = 10,method = "snmf/r")
+```
+
+### NMF Application on Bob Ross Paintings
+
+```{r}
+bob_ross <- "https://raw.githubusercontent.com/fivethirtyeight/data/master/bob-ross/elements-by-episode.csv" %>% read_csv()
+bob_ross <- bob_ross %>% 
+  select(-1,-2) %>% #remove first two columns
+  filter(apply(.,1,sum)>0) %>%  #remove all episodes with no objects
+  select(-which(apply(.,2,sd)==0)) %>% #remove all objects with zero standard deviation
+  as.matrix #convert to matrix
+  
+bob_nmf <- nmf(bob_ross,rank = 4,method = "snmf/r")
+```
+
+
+```{r}
+episodes <- bob_nmf@fit@W
+episodes %>% as.tibble %>% 
+  gather(key = component, value=level) %>% mutate(episode = ((row_number()-1) %% 400)+1) %>% 
+  ggplot(aes(x=episode,y=level,color=component))+
+  geom_point(alpha=0.1)+
+  geom_smooth(span=0.1,alpha=0.01)
+
+library(lattice)
+levelplot(bob_nmf@fit@H)
+```
+
+  
