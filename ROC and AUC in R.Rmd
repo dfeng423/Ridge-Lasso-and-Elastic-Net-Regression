@@ -1,0 +1,112 @@
+---
+title: "ROC and AUC in R"
+output: html_document
+---
+```{r}
+#install.packages("pROC")
+library(pROC)
+#install.packages("randomForest")
+library(randomForest)
+```
+
+```{r}
+set.seed(420)
+num.samples <- 100
+weight <- sort(rnorm(n=num.samples, mean=172, sd=29))
+# sort() function to sort the numbers from low to high
+obese <- ifelse(test=(runif(n=num.samples) < (rank(weight)/100)), yes=1, no=0)
+# The way we are going to classify a sample as obese is to start by using the rank() function, the rank() function to rank the weights, from lightest to heaviest
+# Then we scale the ranks by 100, this means the lightest sample will=1/100=0.01, and the heaviest sample will=100/100=1
+# The 'if smaller than obese, otherwise not obese' is performed by the ifelse() function and the results are stored in a variable called obese.
+plot(x=weight, y=obese)
+```
+
+We can store the results of the glm() function in a variable called glm.fit. Pass weight and the fitted.values stored in glm.fit into the lines() function to draw a curve that tells us the predicted probability that an individual is obese or not obese.
+
+```{r}
+glm.fit=glm(obese ~ weight, family=binomial)
+plot(x=weight, y=obese)
+lines(weight, glm.fit$fitted.values)
+```
+
+We will use the known classifications and the estimated probabilities to draw an ROC curve.
+
+```{r}
+roc(obese, glm.fit$fitted.values, plot=TRUE)
+# we use the roc() function from the rROC library to draw the ROC graph, we pass in the known classifications, obese or not obese, for each sample and the estimated probabilities that each sample is obese, and we tell the roc function to draw the graph, not just calucate all of the numbers used to draw the graph.
+par(pty ='s')
+# to get rid of the ugly padding, we have to use the par() function and muck around with the graphics parameters. In this case, we set pty, aka "the plot type" to s, which is short for "square"
+roc(obese, glm.fit$fitted.values, plot=TRUE)
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE)
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Percentage", ylab="True Positive Percentage")
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Percentage", ylab="True Positive Percentage", col="#377eb8", lwd=4)
+```
+
+The second part is a little more interesting, it tells us how many samples were not obese(not obese=0) and how many were obese (obese=1). The third part is the most interesting of all, it tells us the Area Under the Curve (AUC).
+
+```{r}
+roc.info <- roc(obese, glm.fit$fitted.values, legacy.axes=TRUE)
+# we can access those thresholds by saving the calculations that the roc() function does in a variable
+roc.df <- data.frame(tpp=roc.info$sensitivities*100,
+                     fpp=(1-roc.info$specificities)*100,
+                     thresholds=roc.info$thresholds)
+head(roc.df)
+```
+
+So the first row in roc.df corresponds to the upper right-hand corner of the ROC curve. We see that when the threshold is set to negative infinity, so that every single sample is called obese, then the "TPP", the true positive percentage, is 100 because all of the obese sample were correctly classified, and the "FPP", the false positive percentage, is also 100 because all the samples that were not obese were incorrectly classified.
+
+```{r}
+tail(roc.df)
+```
+
+We see that when the threshold is set to positive infinity, so that every single sample is classified not obese, then the "TPP" and "FPP" are both 0 because none of the samples were classified, either correctly or incorrectly, obese. So the last row in roc.df corresponds to the bottom left-hand corner of the ROC curve.
+
+```{r}
+roc.df[roc.df$tpp > 60 & roc.df$tpp < 80, ]
+```
+
+Now we can isolate the TPP, the FPP and the thresholds used when the True Positive Rate is between 60 and 80. If we were interested in choosing a threshold in this range, we could pick the one that had the optimal balance of True Positives and False Positives.
+
+Now let's go back to talking about customizing what the roc() function draws.
+Print the AUC directly on the graph:
+
+```{r}
+par(pty ='s')
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Percentage", ylab="True Positive Percentage", col="#377eb8", lwd=4, print.auc=TRUE)
+```
+
+Draw and calculate a partial Area Under the Curve. These are useful when you want to focus on the part of the ROC curve that only allows for a small number of False Positives.
+
+```{r}
+par(pty ='s')
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Percentage", ylab="True Positive Percentage", col="#377eb8", lwd=4, print.auc=TRUE, print.auc.x=45, partial.auc=c(100,90), auc.polygon=TRUE, auc.polygon.col="#377eb822")
+# print.auc=TRUE: to print and draw the partial AUC, we start by setting the print.auc parameter to TRUE
+# print.auc.x=45: specify where along the x-axis you want the AUC to be printed, otherwise the text might overlap something important. [location]
+# partial.auc=c(100,90): set partial.auc to the range of specificity values that we want to focus on. NOTE: the range of values is in terms of specificity, not 1-specificity. So 100% specificity corresponds to 0% on our 1-specificity axis, and 90% specificity corresponds to 10% on our 1-specificity axis.
+# auc.polygon=TRUE: we draw the partial area under the curve by setting auc.polygon to TRUE.
+# auc.polygon.col ="#377eb822": specify the polygon's color. NOTE: add two digits to the end (22) to make the color semi-transparent.
+```
+
+How to overlap two ROC curves so that they are easy to compare.
+We'll start by making a random forest classifier with the same dataset.
+
+```{r}
+rf.model <- randomForest(factor(obese)~weight)
+```
+
+Now we draw the original ROC curve for the Logistic regression, and we add the ROC curve for the random forest with the plot.roc() function
+
+```{r}
+par(pty ='s')
+roc(obese, glm.fit$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Percentage", ylab="True Positive Percentage", col="#377eb8", lwd=4, print.auc=TRUE)
+plot.roc(obese, rf.model$votes[,1], percent=TRUE, col="#4daf4a", lwd=4, print.auc=TRUE, add=TRUE, print.auc.y=40)
+# plot.roc() function
+# rf.model$votes[,1]: pass in the number of trees in the forest that voted correctly.
+# add=TRUE: so that this ROC curve is added to an existing graph
+# print.auc.y=40: so that the AUC for the random forest is printed below the AUC for the logistic regression.
+legend("bottomright", legend=c("Logistic Regression", "Random Forest"), col=c("#377eb8","#4daf4a"), lwd=4)
+par(pty="m")
+# once we're all done drawing ROC graphs, we need to reset the pty graphical parameter back to its default value, m, which is short of Maximum. As in, "use the maximum amount of space provided to draw graphs"
+```
+
+
